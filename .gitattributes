@@ -1,0 +1,3 @@
+# Keep LF everywhere so the Linux GitHub Action and local edits agree,
+# and index.html isn't rewritten just for line endings.
+* text=auto eol=lf
