@@ -3271,6 +3271,7 @@ const G = {
   startLaunch() {
     this.state.launching = true; this.state.flashDone = false;
     SHIP.startLaunch(); SHIP.emote('WHEEE!');
+    setTimeout(() => { if (this.state.launching && !this.state.flashDone) { this.state.flashDone = true; this.onWarpDone(); } }, 3200); // don't depend on animation frames (background tabs)
     [220, 277, 330, 440, 554, 660, 880].forEach((f, i) => SFX.tone(f, 0.3, 'sawtooth', 0.025, i * 0.25));
   },
   onWarpDone() {
