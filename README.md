@@ -12,8 +12,10 @@ demand) and:
 1. asks the GitHub API for every public, non-fork repo on this account that has GitHub
    Pages enabled,
 2. keeps the ones with a built Pages site,
-3. rewrites `index.html` with a card per site, and
-4. commits the result if anything changed.
+3. also picks up any folder in this repo that has its own `index.html` (for example
+   [`lost-in-space/`](lost-in-space/)), which is served at `https://badrian404.github.io/<folder>/`,
+4. rewrites `index.html` with a card per site, and
+5. commits the result if anything changed.
 
 So when I publish a new Pages site, it shows up here on its own within a day — no manual
 step.

@@ -2,7 +2,7 @@
 // Regenerates index.html from the owner's public GitHub repos that publish a Pages site.
 // Runs in GitHub Actions (uses GITHUB_TOKEN to avoid rate limits) or locally (set GH_TOKEN).
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -159,6 +159,18 @@ async function main() {
     const url = repo.homepage?.startsWith("http") ? repo.homepage : await pagesUrl(repo);
     if (!url) continue;
     sites.push({ name: repo.name, title: repo.name, url, description: describe(repo) });
+  }
+  // Sites that live in a folder of this repo (e.g. /lost-in-space/index.html) are served
+  // straight from here, so list them too.
+  for (const entry of readdirSync(ROOT, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name.startsWith(".") || entry.name === "scripts") continue;
+    if (!existsSync(join(ROOT, entry.name, "index.html"))) continue;
+    sites.push({
+      name: entry.name,
+      title: entry.name,
+      url: `https://${SELF}/${entry.name}/`,
+      description: overrides[entry.name] || "A published site — no description yet.",
+    });
   }
   sites.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
   writeFileSync(join(ROOT, "index.html"), render(sites));
