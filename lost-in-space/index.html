@@ -180,6 +180,25 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 370px;
   #shipWrap{width:min(100%, calc(40vh * 480 / 216))}
   #term .scroll{font-size:16px}
 }
+/* "New this mission" box + hint labels */
+.learn{margin-top:12px;background:#0a1a33;border:1px solid #1f4a55;border-radius:10px;padding:8px 10px}
+.learn summary{cursor:pointer;font-weight:800;color:var(--cyan);font-size:14px}
+.learn .li{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:start;margin-top:7px;font-size:13.5px;color:#c9d5e6}
+.learn .li code{white-space:nowrap}
+.learn .try{display:inline;margin-left:2px;background:#050c19;border:1px solid #1d4a55;color:var(--cyan);border-radius:5px;padding:0 6px;font:12.5px var(--mono);cursor:pointer}
+.learn .try:hover{border-color:var(--cyan)}
+.learn .lnote{margin-top:8px;font-size:12px;color:#7f95b5}
+#dustText p{margin:0 0 6px} #dustText p:last-child{margin:0}
+#dustText .hstep{color:#9fb0c8;font-size:13px}
+#dustText .hmore{color:#7f95b5;font-size:13px}
+/* keep D.U.S.T. + buttons always visible; the mission card scrolls instead */
+@media (min-width:1001px){
+  #right{overflow:hidden}
+  #missionCard{flex:1 1 auto;min-height:140px;overflow:auto}
+  #dustCard,.btns{flex:none}
+  #dustText{max-height:34vh;overflow:auto}
+}
+#dustText .hcode{margin-top:6px;background:#050c19;border:1px solid #1d4a55;border-radius:8px;padding:6px 8px;font:13.5px/1.45 var(--mono);white-space:pre-wrap;color:#dfe9f5}
 
 </style>
 </head>
@@ -1705,10 +1724,12 @@ If you are reading this, you found the locker. Well done!
 4. A map of the ship's folders is in /ship/README.txt.
 
 Remember:
-   pwd   = where am I?
-   ls    = what is here?
-   cd    = go somewhere
-   cat   = read a file
+   pwd      = where am I?
+   ls       = what is here?  (blue = folder, white = file)
+   cd NAME  = walk into a folder
+   cd ..    = go back up one folder
+   cd /ship = jump straight to /ship from anywhere
+   cat      = read a file
 
 Good luck, cadet.            -- Captain Vega
 `);
@@ -1731,6 +1752,9 @@ If found, please return to D.U.S.T. Reward: one (1) compliment.
   /ship/engine        engine room
   /ship/launch        launch control
   /ship/galley        greenhouse and galley
+
+Tip: cd /ship/nav jumps straight to a folder from anywhere.
+     cd .. goes back up one folder.
 `);
   // nav + archive
   fsPut('/ship/nav/README.txt', 'NAVIGATION COMPUTER\nI read my star map from: /ship/nav/starmap.dat\nNo star map = no idea where home is.\n');
@@ -1759,7 +1783,7 @@ into the file target.txt in this folder. Example:
 I only fix ERRORs. WARNings are not my department.
 `);
   // airlock
-  fsPut('/ship/airlock/README.txt', 'AIRLOCK CONTROL\nThe inner door only opens when open_airlock.sh runs.\nIf it refuses to run, check its permissions: ls -l\n');
+  fsPut('/ship/airlock/README.txt', 'AIRLOCK CONTROL\nThe inner door only opens when open_airlock.sh runs.\nIf it refuses to run, check its permissions: ls -l\n\nReading permissions (the first column of ls -l):\n  -rwxr--r--\n   ^^^ you (the owner): r = read, w = write, x = run\n      ^^^ your group   ^^^ everyone else\nNo x for you? Then the ship will not run it.\n');
   fsPut('/ship/airlock/open_airlock.sh', '#!/bin/bash\n# Opens the Starling\'s inner airlock door.\necho "Checking air pressure... OK"\necho "Unlocking door bolts..."\nairlockctl open\n', { mode: 0o644 });
   // maintenance
   fsPut('/ship/maintenance/README.txt', `MAINTENANCE BAY — notes from the drone engineer
@@ -1767,6 +1791,9 @@ I only fix ERRORs. WARNings are not my department.
 * drone/drone.conf holds its settings. Keep it.
 * cache/ is temporary junk. Safe to clear out when the disk is full.
 * The drone refuses to start when /ship is 80% full or more.
+
+How to measure:  df -h        (how full is each disk?)
+                 du -sh FOLDER (how big is this folder?)
 `);
   fsPut('/ship/maintenance/drone/firmware.bin', '\u0000DRONE-FIRMWARE v2.3', { size: 180 * MB });
   fsPut('/ship/maintenance/drone/drone.conf', 'patrol_route = all_decks\nsuction = gentle\navoid = D.U.S.T.\n');
@@ -1774,7 +1801,7 @@ I only fix ERRORs. WARNings are not my department.
   for (let i = 1; i <= 8; i++) fsPut(`/ship/maintenance/cache/dust_selfies/selfie_${String(i).padStart(3, '0')}.png`, '\u0000PNG', { size: 5 * MB });
   fsPut('/ship/maintenance/logs/maint.log', '[drone] boot... not enough free space on /ship. Going back to sleep.\n');
   // comms
-  fsPut('/ship/comms/README.txt', 'COMMUNICATIONS\nThe distress beacon is a service called "beacon".\nIts settings: /etc/beacon.conf   Its log: /var/log/beacon.log\nCheck it with: systemctl status beacon\n');
+  fsPut('/ship/comms/README.txt', 'COMMUNICATIONS\nThe distress beacon is a service called "beacon".\nIts settings: /etc/beacon.conf   Its log: /var/log/beacon.log\nCheck it with: systemctl status beacon\n\nThe beacon finds the home relay by name. Names are turned into\naddresses (like 10.0.0.42) using the address book /etc/hosts.\nFiles in /etc belong to root, so edit them with sudo.\n');
   // engine
   fsPut('/ship/engine/engine.conf', ENGINE_CONF);
   fsPut('/ship/engine/README.txt', `ENGINE SETTINGS — allowed values (engine.conf)
@@ -1974,75 +2001,85 @@ C.launch = (a, io) => {
   io.line('>>> ALL CHECKS PASSED. LAUNCH SEQUENCE ENGAGED. 3... 2... 1... <<<', 'c-ok');
 };
 
-// ---------- notebook ----------
+// ---------- notebook (also feeds each mission card's "New this mission" box) ----------
 const NOTEBOOK = [
-  { m: 1, cmd: 'pwd', what: 'print working directory — shows the folder you are in', ex: ['pwd'] },
-  { m: 1, cmd: 'ls', what: 'list what is inside a folder', ex: ['ls', 'ls /ship', 'ls -a      (show hidden files too)'] },
-  { m: 1, cmd: 'cd', what: 'change directory — move into a folder', ex: ['cd locker', 'cd ..      (go up one folder)', 'cd ~       (go home)'] },
-  { m: 1, cmd: 'cat', what: 'show what is inside a file', ex: ['cat notes.txt'] },
-  { m: 1, cmd: 'clear', what: 'clear the terminal screen (or press Ctrl+L)', ex: ['clear'] },
-  { m: 1, cmd: 'Tab', what: 'auto-complete: type the start of a name and press Tab', ex: ['cat res<Tab>'], key: true },
-  { m: 2, cmd: 'paths', what: 'a path is an address. / is the very top. .. is the folder above. ~ is your home', ex: ['/ship/nav/starmap.dat   (absolute: starts at /)', 'locker/socks.txt        (relative: starts where you are)'], key: true },
-  { m: 2, cmd: 'cp', what: 'copy a file: cp FROM TO', ex: ['cp a.txt b.txt', 'cp a.txt /tmp/     (copy into a folder)'] },
-  { m: 2, cmd: 'mv', what: 'move or rename a file: mv FROM TO', ex: ['mv old.txt new.txt', 'mv a.txt folder/'] },
-  { m: 3, cmd: 'mkdir', what: 'make a new folder', ex: ['mkdir crates', 'mkdir a b c   (three at once)'] },
-  { m: 3, cmd: '*', what: 'wildcard: * matches any characters in a name', ex: ['ls *.txt', 'mv engine_* engine/'], key: true },
-  { m: 3, cmd: 'tree', what: 'draw a folder and everything inside it', ex: ['tree /ship/cargo'] },
-  { m: 4, cmd: 'grep', what: 'find lines that contain a word', ex: ['grep ERROR ship.log', 'grep -i error ship.log   (ignore upper/lower case)', 'grep -c WARN ship.log    (count matches)'] },
-  { m: 4, cmd: 'tail', what: 'show the last lines of a file', ex: ['tail ship.log', 'tail -n 3 ship.log'] },
-  { m: 4, cmd: 'head', what: 'show the first lines of a file', ex: ['head -n 5 ship.log'] },
-  { m: 4, cmd: 'less', what: 'scroll through a long file (arrows/space to move, / to search, q to quit)', ex: ['less ship.log'] },
-  { m: 4, cmd: 'echo', what: 'print some text', ex: ['echo hello', 'echo J-00 > target.txt   (> writes into a file)', 'echo more >> notes.txt   (>> adds to the end)'] },
-  { m: 5, cmd: 'ls -l', what: 'long listing: shows permissions like -rwxr-xr-x (r=read, w=write, x=run)', ex: ['ls -l'], key: true },
-  { m: 5, cmd: 'chmod', what: 'change permissions', ex: ['chmod u+x script.sh   (let me run it)', 'chmod u-w file.txt    (stop me changing it)'] },
-  { m: 5, cmd: './', what: 'run a program or script in this folder', ex: ['./open_airlock.sh'], key: true },
-  { m: 6, cmd: 'ps', what: 'list running programs (processes)', ex: ['ps', 'ps aux   (everything, with CPU use)'] },
-  { m: 6, cmd: 'top', what: 'show the busiest programs', ex: ['top'] },
-  { m: 6, cmd: 'kill', what: 'ask a process to stop, by its PID number', ex: ['kill 1234', 'kill -9 1234   (force — last resort)'] },
-  { m: 6, cmd: 'pkill', what: 'stop processes by name', ex: ['pkill robot-arm'] },
-  { m: 7, cmd: 'df', what: 'how full is each disk?', ex: ['df -h'] },
-  { m: 7, cmd: 'du', what: 'how much space do folders use?', ex: ['du -sh *', 'du -sh /ship/maintenance/*'] },
-  { m: 7, cmd: 'rm', what: 'delete files (no trash can — careful!)', ex: ['rm junk.txt', 'rm -r old_folder   (folder + everything in it)'] },
-  { m: 8, cmd: 'ping', what: 'check whether another computer answers', ex: ['ping relay.home', 'ping -c 2 10.0.0.42'] },
-  { m: 8, cmd: 'curl', what: 'fetch a web page or service', ex: ['curl http://relay.home/status'] },
-  { m: 8, cmd: 'sudo', what: 'run one command as the ship\'s admin (root)', ex: ['sudo nano /etc/hosts'] },
-  { m: 8, cmd: 'systemctl', what: 'check, start and restart ship services', ex: ['systemctl status beacon', 'sudo systemctl restart beacon'] },
-  { m: 8, cmd: 'nano', what: 'a simple text editor (Ctrl+O saves, Ctrl+X exits)', ex: ['nano notes.txt'] },
-  { m: 9, cmd: 'diff', what: 'show the differences between two files', ex: ['diff engine.conf.bak engine.conf'] },
-  { m: 9, cmd: 'journalctl', what: 'read a service\'s log', ex: ['journalctl -u engine'] },
-  { m: 9, cmd: 'sed', what: 'replace text in a file without opening it', ex: ["sed -i 's/old/new/' file.txt"] },
-  { m: 10, cmd: '|', what: 'pipe: send one command\'s output into the next', ex: ['grep WARN fuel.log | wc -l'], key: true },
-  { m: 10, cmd: 'wc', what: 'count lines, words and characters', ex: ['wc -l fuel.log'] },
-  { m: 10, cmd: '&&', what: 'run the next command only if the last one succeeded', ex: ['preflight hull && launch'], key: true },
-  { m: 10, cmd: '$?', what: 'the exit status of the last command: 0 = success, anything else = a problem', ex: ['preflight nav', 'echo $?'], key: true },
-  { m: 10, cmd: 'bash', what: 'run a script (or make it executable and use ./)', ex: ['bash launch.sh'] },
-  { m: 10, cmd: 'find', what: 'search for files by name', ex: ["find /ship -name '*.bak'"] },
+  { m: 1, cmd: 'pwd', what: 'shows which folder you are in right now', ex: ['pwd'] },
+  { m: 1, cmd: 'ls', what: 'lists what is in this folder. Blue names are folders, white names are files', ex: ['ls', 'ls -a      (also show hidden files)'] },
+  { m: 1, cmd: 'cd', what: 'walks into a folder', ex: ['cd locker', 'cd ..      (back up one folder)', 'cd         (straight home)'] },
+  { m: 1, cmd: 'cat', what: 'shows what is written inside a file', ex: ['cat notes.txt'] },
+  { m: 1, cmd: 'Tab', what: 'type the start of a name, press Tab, and the rest fills in', ex: ['cat res  then Tab'], key: true },
+  { m: 1, cmd: '~', what: 'your home folder (/home/cadet). The prompt shows where you are, like ~/locker', ex: ['cd ~'], key: true },
+  { m: 2, cmd: '/', what: 'a path starting with / is a full address from the very top of the ship. It works from anywhere', ex: ['cd /ship/archive', 'ls /ship/nav'], key: true },
+  { m: 2, cmd: 'cd ..', what: 'goes UP one folder (.. means "the folder above this one")', ex: ['cd ..', 'cd ../..   (up two folders)'] },
+  { m: 2, cmd: 'cp', what: 'copies a file: cp FROM TO. The copy can get a new name', ex: ['cp a.txt b.txt', 'cp a.txt /tmp/     (copy into a folder)'] },
+  { m: 2, cmd: 'mv', what: 'moves or renames a file: mv FROM TO', ex: ['mv old.txt new.txt', 'mv a.txt folder/'] },
+  { m: 2, cmd: 'clear', what: 'wipes the terminal screen clean (or press Ctrl+L)', ex: ['clear'] },
+  { m: 3, cmd: 'mkdir', what: 'makes a new, empty folder', ex: ['mkdir crates', 'mkdir a b c   (three at once)'] },
+  { m: 3, cmd: '*', what: 'a wildcard: * matches any letters in a name', ex: ['ls *.txt', 'mv engine_* engine/'], key: true },
+  { m: 3, cmd: 'tree', what: 'draws a folder and everything inside it', ex: ['tree /ship/cargo'] },
+  { m: 4, cmd: 'grep', what: 'shows only the lines that contain a word', ex: ['grep ERROR ship.log', 'grep -i error ship.log   (ignore upper/lower case)', 'grep -c WARN ship.log    (count them)'] },
+  { m: 4, cmd: 'less', what: 'scroll through a long file. Arrows move, / searches, q quits', ex: ['less ship.log'] },
+  { m: 4, cmd: 'tail', what: 'shows the last lines of a file (head shows the first)', ex: ['tail ship.log', 'head -n 5 ship.log'] },
+  { m: 4, cmd: 'echo', what: 'prints text on the screen', ex: ['echo hello'] },
+  { m: 4, cmd: '>', what: 'sends output into a file instead of the screen (>> adds to the end)', ex: ['echo hi > note.txt', 'echo more >> note.txt'], key: true },
+  { m: 5, cmd: 'ls -l', what: 'long list with permissions like -rwxr--r--: r = read, w = write, x = run', ex: ['ls -l'] },
+  { m: 5, cmd: 'chmod', what: 'changes permissions: u = you, + adds, - removes, x = run', ex: ['chmod u+x script.sh'] },
+  { m: 5, cmd: './', what: 'runs a program or script that is in this folder', ex: ['./open_airlock.sh'], key: true },
+  { m: 6, cmd: 'ps', what: 'lists running programs (processes). ps aux shows all of them, with their ID (PID)', ex: ['ps aux'] },
+  { m: 6, cmd: 'kill', what: 'politely asks a process to stop, using its PID number', ex: ['kill 1234', 'kill -9 1234   (force it — last resort)'] },
+  { m: 6, cmd: 'top', what: 'shows the busiest programs first', ex: ['top'] },
+  { m: 6, cmd: 'pkill', what: 'stops processes by name instead of number', ex: ['pkill robot-arm'] },
+  { m: 7, cmd: 'df', what: 'how full is each disk? Look at the Use% column', ex: ['df -h'] },
+  { m: 7, cmd: 'du', what: 'how much space folders use. -s = one total each, -h = friendly sizes (K, M, G)', ex: ['du -sh /ship/*'] },
+  { m: 7, cmd: 'rm', what: 'deletes files forever — there is no trash can!', ex: ['rm junk.txt', 'rm -r old_folder   (a folder and everything in it)'] },
+  { m: 8, cmd: 'systemctl', what: 'checks and restarts ship services (programs that run in the background)', ex: ['systemctl status beacon', 'sudo systemctl restart beacon'] },
+  { m: 8, cmd: 'sudo', what: 'runs ONE command as the ship\'s admin (root). Needed for /etc files and services', ex: ['sudo nano /etc/hosts'] },
+  { m: 8, cmd: 'nano', what: 'a text editor. Arrow keys move, type to change, Ctrl+O saves, Ctrl+X exits', ex: ['nano notes.txt'] },
+  { m: 8, cmd: 'ping', what: 'checks whether another computer answers', ex: ['ping relay.home', 'ping 10.0.0.42'] },
+  { m: 8, cmd: '/etc/hosts', what: 'the address book: each line is a number (IP address) and the names that go with it', ex: ['cat /etc/hosts'], key: true },
+  { m: 8, cmd: 'curl', what: 'fetches a web page or service', ex: ['curl relay.home/status'] },
+  { m: 9, cmd: 'backup', what: 'before changing a file, copy it with cp — then mistakes can be undone', ex: ['cp engine.conf engine.conf.bak'], key: true },
+  { m: 9, cmd: 'diff', what: 'shows the differences between two files', ex: ['diff engine.conf.bak engine.conf'] },
+  { m: 9, cmd: 'journalctl', what: 'reads a service\'s log', ex: ['journalctl -u engine'] },
+  { m: 9, cmd: 'sed', what: 'swaps text inside a file without opening it', ex: ["sed -i 's/old/new/' file.txt"] },
+  { m: 10, cmd: '|', what: 'a pipe: sends one command\'s output into the next command', ex: ['grep WARN fuel.log | wc -l'], key: true },
+  { m: 10, cmd: 'wc', what: 'counts lines (-l), words (-w) or characters (-c)', ex: ['wc -l fuel.log'] },
+  { m: 10, cmd: '&&', what: 'runs the next command only if the last one worked', ex: ['preflight hull && launch'], key: true },
+  { m: 10, cmd: '$?', what: 'the last command\'s exit status: 0 = worked, anything else = a problem', ex: ['echo $?'], key: true },
+  { m: 10, cmd: 'script', what: 'a text file of commands. First line #!/bin/bash, then chmod u+x and run it with ./', ex: ['./launch.sh', 'bash launch.sh'], key: true },
+  { m: 10, cmd: 'find', what: 'searches for files by name', ex: ["find /ship -name '*.bak'"] },
 ];
 
 // ---------- missions ----------
-const ev = () => G.mev;
 const hasEv = pred => G.mev.some(pred);
-const RESTORE = 'checkpoint';
 
 const MISSIONS = [
   {
     id: 1, title: 'Where am I?', room: 'quarters',
     problem: 'You wake up in your bunk. The lights are off, the crew is gone, and a small vacuum robot is staring at you.',
     objective: 'Find and read your rescue instructions.',
-    intro: ["Oh good, you're awake! I am D.U.S.T., a military-grade rescue unit.", "...Fine. Domestic Utility & Sanitation Technician. But I have lasers.", "The crew left rescue instructions somewhere in your quarters. Let's find them — type into the terminal below!"],
+    intro: ["Oh good, you're awake! I'm D.U.S.T., a military-grade rescue unit. ...Fine: Domestic Utility & Sanitation Technician. But I have lasers.",
+      'The terminal below is how you talk to the ship: type a command, press Enter, and the ship answers.',
+      'The crew left rescue instructions somewhere in your quarters. Follow the checklist on the mission card!'],
     tasks: [
-      { text: 'Ask the ship where you are: <code>pwd</code>', latch: true, check: () => hasEv(e => e.type === 'cmd' && e.name === 'pwd') },
-      { text: 'Look around with <code>ls</code>', latch: true, check: () => hasEv(e => e.type === 'cmd' && (e.name === 'ls' || e.name === 'tree')) },
-      { text: 'Step into your locker with <code>cd</code>', latch: true, check: () => hasEv(e => e.type === 'visit' && !e.cmd && e.path === HOME + '/locker') },
-      { text: 'Read the rescue instructions', latch: true, check: () => hasEv(e => e.type === 'read' && e.path === HOME + '/locker/rescue_instructions.txt') },
+      { text: 'Ask the ship where you are: <code>pwd</code>', latch: true, check: () => hasEv(e => e.type === 'cmd' && e.name === 'pwd'),
+        hints: ['pwd stands for "print working directory". A directory is just a folder, and pwd tells you which folder you are standing in.',
+          'Click on the terminal, type  pwd  and press Enter.',
+          'pwd\n  → /home/cadet\nThat means: you are in the cadet folder, which is in the home folder, which is at the very top of the ship ( / ). The ~ in your prompt is short for this home folder.'] },
+      { text: 'Look around with <code>ls</code>', latch: true, check: () => hasEv(e => e.type === 'cmd' && (e.name === 'ls' || e.name === 'tree')),
+        hints: ['ls is short for "list". It shows everything in the folder you are in. Blue names are folders you can go into; white names are files you can read.',
+          'Type  ls  and press Enter.',
+          'ls\n  → bunk  locker  notes.txt\nbunk and locker are blue, so they are folders. notes.txt is a file.'] },
+      { text: 'Step into your locker with <code>cd</code>', latch: true, check: () => hasEv(e => e.type === 'visit' && !e.cmd && e.path === HOME + '/locker'),
+        hints: ['cd means "change directory": it walks you into a folder. Folders are like rooms, and files are like the papers inside them.',
+          'Type cd, a space, and the name of the folder:  cd locker',
+          'cd locker\nYour prompt now ends in ~/locker so you can always see where you are.\nTo walk back out later, type  cd ..  (two dots mean "the folder above").'] },
+      { text: 'Read the rescue instructions', latch: true, check: () => hasEv(e => e.type === 'read' && e.path === HOME + '/locker/rescue_instructions.txt'),
+        hints: ['You are in the locker now. Use ls again to see which files are in here.',
+          'cat shows what is written inside a file. Type cat, a space, then the file name.',
+          'cat rescue_instructions.txt\nShortcut: type  cat res  and press Tab, and the name finishes itself!'] },
     ],
-    bonus: { text: 'Find D.U.S.T.\'s secret stash (hidden files start with a dot)', check: () => hasEv(e => e.type === 'read' && e.path === HOME + '/.screw_collection') },
-    hints: [
-      'Your rescue instructions are somewhere in your quarters. Start by asking the ship where you are.',
-      'pwd prints the folder you are in. ls lists what is inside it. cd moves you into a folder.',
-      'Try:  ls  — then  cd locker  — then  ls  again.',
-      'cat shows what is inside a file:\n  cat rescue_instructions.txt\nTip: type  cat res  and press Tab — the name finishes itself!',
-    ],
+    bonus: { text: "Find D.U.S.T.'s secret stash in your home folder. Hidden files start with a dot, and <code>ls -a</code> shows them (<code>cd ~</code> takes you home)", check: () => hasEv(e => e.type === 'read' && e.path === HOME + '/.screw_collection') },
     success: 'You found the instructions! I helped by not vacuuming them.',
     payoff: 'The ship map lights up: every room now has a name, and a pin shows where you are.',
   },
@@ -2050,31 +2087,33 @@ const MISSIONS = [
     id: 2, title: 'Missing star map', room: 'cockpit',
     problem: 'The navigation console is dark. It lost its star map, so it has no idea where home is.',
     objective: 'Put a working copy of the star map at /ship/nav/starmap.dat',
-    intro: ['Good news: I found the cockpit. Bad news: the navigation computer forgot where everything is.', 'It needs a file called starmap.dat inside /ship/nav. Captain Vega said there is a backup in /ship/archive.'],
+    intro: ['Good news: I found the cockpit. Bad news: the navigation computer forgot where everything is. It needs a file called starmap.dat in the folder /ship/nav.',
+      'Captain Vega said a backup copy is kept somewhere in /ship/archive.',
+      'New trick: a path that starts with / is a full address from the top of the ship, so cd /ship/archive works from anywhere. And cd .. takes you back up one folder.'],
     setup() { fsRm('/ship/nav/starmap.dat'); if (!getNode('/ship/archive/backups/nav/starmap.dat.bak')) fsPut('/ship/archive/backups/nav/starmap.dat.bak', STARMAP); },
     solve() { fsPut('/ship/nav/starmap.dat', STARMAP); },
     tasks: [
-      { text: 'Find the backup star map in <code>/ship/archive</code>', latch: true, check: () => hasEv(e => (e.type === 'visit' || e.type === 'read') && e.path && e.path.startsWith('/ship/archive/backups/nav')) },
-      { text: 'Put a working copy at <code>/ship/nav/starmap.dat</code>', check: () => validStarmap() },
+      { text: 'Find the backup star map somewhere in <code>/ship/archive</code>', latch: true, check: () => hasEv(e => (e.type === 'visit' || e.type === 'read') && e.path && e.path.startsWith('/ship/archive/backups/nav')),
+        hints: ['You are still in your locker, and /ship is a different part of the ship. A path that starts with / is a full address from the very top, so it works no matter where you are.',
+          'Jump straight there with  cd /ship/archive  then use ls. Keep going into folders with cd (Tab helps!) until you spot a star map. Wrong folder? cd .. goes back up one.',
+          'cd /ship/archive\nls          → backups  crew_photos  music\ncd backups\nls          → galley  nav\ncd nav\nls          → starmap.dat.bak  starmap_draft.dat\nThe .bak file is the real backup. The draft is D.U.S.T.\'s drawing.'] },
+      { text: 'Put a working copy at <code>/ship/nav/starmap.dat</code>', check: () => validStarmap(),
+        hints: ['cp copies a file: cp FROM TO. While it copies, it can also give the copy a new name. The nav computer only reads a file named exactly starmap.dat.',
+          'From the folder with the backup, copy it into /ship/nav and call the copy starmap.dat:\n  cp starmap.dat.bak /ship/nav/starmap.dat',
+          'cp /ship/archive/backups/nav/starmap.dat.bak /ship/nav/starmap.dat\n  └ first path = the original, second path = where the copy goes and its new name.\nCheck it worked:  ls /ship/nav'] },
     ],
-    bonus: { text: 'Check how big the star map is with <code>ls -l</code>', check: () => hasEv(e => e.type === 'visit' && e.cmd === 'ls' && e.flags.includes('l') && e.path.startsWith('/ship/')) },
+    bonus: { text: 'Check how big the star map is with <code>ls -l /ship/nav</code> (the number before the date is its size in bytes)', check: () => hasEv(e => e.type === 'visit' && e.cmd === 'ls' && e.flags.includes('l') && e.path.startsWith('/ship/')) },
     nudge() {
       const nav = getNode('/ship/nav');
       if (nav && !validStarmap()) {
         const wrong = Object.values(nav.kids).find(k => k.t === 'f' && k.data.includes('[STARMAP-VALID]'));
-        if (wrong) return `So close! It's in the right folder as "${wrong.name}", but the nav computer only reads a file named exactly starmap.dat. mv can rename it.`;
+        if (wrong) return `So close! It's in the right folder as "${wrong.name}", but the nav computer only reads a file named exactly starmap.dat. Rename it with mv:  mv /ship/nav/${wrong.name} /ship/nav/starmap.dat`;
         const d = getNode('/ship/nav/starmap.dat');
-        if (d && d.data.includes('draft by D.U.S.T.')) return "Ah. That's my drawing. It's... mostly a circle. We need the real backup — the .bak one.";
+        if (d && d.data.includes('draft by D.U.S.T.')) return "Ah. That's my drawing. It's... mostly a circle. We need the real backup: the file ending in .bak.";
       }
       return null;
     },
     critical() { if (!findFiles(n => n.data.includes('[STARMAP-VALID]')).length) return { msg: 'You deleted the only star map. Bold strategy. Restoring our backup!' }; return null; },
-    hints: [
-      "Captain Vega's note said backups are kept in /ship/archive. Go exploring!",
-      'Paths are addresses. /ship/archive/backups means: start at the top (/), then ship, then archive, then backups. cp copies a file:  cp FROM TO',
-      'Look inside:  ls /ship/archive/backups/nav\nThen copy the .bak file to /ship/nav/starmap.dat',
-      'cp /ship/archive/backups/nav/starmap.dat.bak /ship/nav/starmap.dat\n  └ cp = copy. First path = the original. Second path = where the copy goes, and its new name.',
-    ],
     success: 'Stars! Actual stars! I have never been so emotional about a file.',
     payoff: 'Stars illuminate the navigation dome.',
   },
@@ -2082,107 +2121,118 @@ const MISSIONS = [
     id: 3, title: 'Cargo chaos', room: 'cargo',
     problem: 'The cargo bay lost gravity and every crate is floating around. Engine parts are mixed up with the pudding.',
     objective: 'Sort every crate into a folder: engine, nav or food.',
-    intro: ["The cargo bay is... let's call it 'zero-gravity modern art'.", 'Each crate is a file in /ship/cargo. Give each kind its own folder and the cargo robots will stack them.'],
+    intro: ["The cargo bay is... let's call it 'zero-gravity modern art'.",
+      'Each crate is a file in /ship/cargo. The file manifest.txt there explains where they go. Give each kind of crate its own folder and the cargo robots will stack them.',
+      'New tools: mkdir makes a folder, mv moves files, and a * star matches lots of names at once.'],
     setup() { for (const c of CRATES) { if (!findFiles(n => n.data.includes(`[crate:${c[1]}]`)).length) fsPut('/ship/cargo/' + c[0], crateText(c)); } },
     solve() { for (const c of CRATES) { for (const p of findFiles(n => n.data.includes(`[crate:${c[1]}]`))) fsRm(p); fsMkdirp('/ship/cargo/' + c[2]); fsPut(`/ship/cargo/${c[2]}/${c[0]}`, crateText(c)); } },
     tasks: [
-      { text: 'Make folders named <code>engine</code>, <code>nav</code> and <code>food</code> in <code>/ship/cargo</code>', check: () => ['engine', 'nav', 'food'].every(d => getNode('/ship/cargo/' + d)?.t === 'd') },
-      { text: 'Move every crate into its folder (see <code>manifest.txt</code>)', check: () => CRATES.every(c => { const ps = findFiles(n => n.data.includes(`[crate:${c[1]}]`)); return ps.length && ps.every(p => parentOf(p).dirPath === '/ship/cargo/' + c[2]); }) },
+      { text: 'Make folders named <code>engine</code>, <code>nav</code> and <code>food</code> inside <code>/ship/cargo</code>', check: () => ['engine', 'nav', 'food'].every(d => getNode('/ship/cargo/' + d)?.t === 'd'),
+        hints: ['First go to the cargo bay:  cd /ship/cargo  and look around with ls. Read the manifest with  cat manifest.txt',
+          'mkdir makes a new, empty folder. You can make several at once by putting spaces between the names.',
+          'cd /ship/cargo\nmkdir engine nav food\nls     → the three new folders show up in blue'] },
+      { text: 'Move every crate into its folder', check: () => CRATES.every(c => { const ps = findFiles(n => n.data.includes(`[crate:${c[1]}]`)); return ps.length && ps.every(p => parentOf(p).dirPath === '/ship/cargo/' + c[2]); }),
+        hints: ['mv moves a file into a folder:  mv FILE FOLDER/  Each crate\'s name starts with its type: engine_, nav_ or food_.',
+          'You can move crates one by one (mv engine_bolts.txt engine/), or use a * star: engine_* means "every name that starts with engine_".',
+          'mv engine_* engine/\nmv nav_* nav/\nmv food_* food/\nCheck your work with:  tree'] },
     ],
-    bonus: { text: 'Press <kbd>Tab</kbd> to auto-complete a name', check: () => hasEv(e => e.type === 'tab') },
+    bonus: { text: 'Use <kbd>Tab</kbd> to finish a name for you (type <code>mv eng</code> and press Tab)', check: () => hasEv(e => e.type === 'tab') },
     nudge() {
       for (const c of CRATES) {
         const ps = findFiles(n => n.data.includes(`[crate:${c[1]}]`));
-        if (ps.length > 1 && ps.some(p => parentOf(p).dirPath === '/ship/cargo/' + c[2])) return `cp made a copy, but the original ${c[0]} is still floating around. mv moves things instead of copying them.`;
+        if (ps.length > 1 && ps.some(p => parentOf(p).dirPath === '/ship/cargo/' + c[2])) return `cp made a copy, but the original ${c[0]} is still floating around. mv moves things instead of copying them (or rm the leftover original).`;
       }
       return null;
     },
     critical() {
-      for (const c of CRATES) if (!findFiles(n => n.data.includes(`[crate:${c[1]}]`)).length) return { msg: `The ${c[0].replace('.txt', '')} crate is gone — you threw it out of the airlock. Bold strategy. Restoring our backup!` };
+      for (const c of CRATES) if (!findFiles(n => n.data.includes(`[crate:${c[1]}]`)).length) return { msg: `The ${c[0].replace('.txt', '')} crate is gone. You threw it out of the airlock. Bold strategy. Restoring our backup!` };
       return null;
     },
-    hints: [
-      'Every crate file starts with what is inside it: engine_, nav_ or food_. The manifest in /ship/cargo explains where they go.',
-      'mkdir makes a folder. mv moves files. A star * means "anything", so engine_* means every name that starts with engine_.',
-      'cd /ship/cargo\nmkdir engine nav food\nmv engine_* engine/',
-      'Then:  mv nav_* nav/   and   mv food_* food/\n  └ mv = move. nav_* = all files beginning with nav_. nav/ = into the nav folder.',
-    ],
     success: 'Look at them go! The cargo robots are stacking crates. I supervised. Loudly.',
     payoff: 'Cargo robots sort the floating crates into neat stacks.',
     upgrade: { key: 'stripes', text: 'D.U.S.T. earned racing stripes!' },
   },
   {
     id: 4, title: 'Someone left a clue', room: 'workshop',
-    problem: 'Something is overheating. The ship log has hundreds of lines, and one of them explains what broke.',
+    problem: 'Something is overheating. The ship log has 400 lines, and one of them explains what broke.',
     objective: 'Find the ERROR in the ship log and send the repair bot to that junction.',
-    intro: ["Something is overheating. I can smell it. I can't smell. But still.", 'The ship writes everything into /ship/engineering/logs/ship.log. Somewhere in there is a line marked ERROR.'],
+    intro: ["Something is overheating. I can smell it. I can't smell. But still.",
+      'The ship writes everything it does into a log file: /ship/engineering/logs/ship.log. One of its 400 lines is marked ERROR.',
+      "Reading all 400 lines would take ages, so we'll search the file instead. Then the repair bot in /ship/engineering/repairbot needs to know where to go."],
     setup() { fsRm('/ship/engineering/repairbot/target.txt'); if (!getNode('/ship/engineering/logs/ship.log')) fsPut('/ship/engineering/logs/ship.log', genShipLog()); },
     solve() { fsPut('/ship/engineering/repairbot/target.txt', 'J-47\n'); },
     tasks: [
-      { text: 'Search <code>/ship/engineering/logs/ship.log</code> for the ERROR', latch: true, check: () => hasEv(e => (e.type === 'read' && e.path === '/ship/engineering/logs/ship.log')) },
-      { text: 'Send the repair bot: write the junction code into <code>repairbot/target.txt</code>', check: () => /J-?47\b/i.test(fsRead('/ship/engineering/repairbot/target.txt') || '') },
+      { text: 'Search <code>/ship/engineering/logs/ship.log</code> for the line marked ERROR', latch: true, check: () => hasEv(e => (e.type === 'read' && e.path === '/ship/engineering/logs/ship.log')),
+        hints: ['cat would dump all 400 lines at once. grep is smarter: it only shows the lines that contain the word you ask for.',
+          'grep needs two things: the word to look for, then the file:  grep WORD FILE  (capital letters matter: ERROR is not error).',
+          'grep ERROR /ship/engineering/logs/ship.log\n  → one line with ERROR and a junction code like J-??\n(Or scroll with  less /ship/engineering/logs/ship.log : arrows move, /ERROR searches, q quits.)'] },
+      { text: 'Send the repair bot: write the junction code into <code>/ship/engineering/repairbot/target.txt</code>', check: () => /J-?47\b/i.test(fsRead('/ship/engineering/repairbot/target.txt') || ''),
+        hints: ['The repair bot takes its orders from a file. Read its instructions:  cat /ship/engineering/repairbot/README.txt',
+          'echo prints text on the screen. Put > and a file name after it, and the text goes into that file instead.',
+          'echo J-?? > /ship/engineering/repairbot/target.txt\n  (swap J-?? for the junction code from the ERROR line)\nCheck it:  cat /ship/engineering/repairbot/target.txt'] },
     ],
-    bonus: { text: 'Count the WARN lines with <code>grep -c</code>', check: () => hasEv(e => e.type === 'grep' && e.flags.includes('c')) },
+    bonus: { text: 'Count the WARN lines with <code>grep -c WARN</code> and the log path', check: () => hasEv(e => e.type === 'grep' && e.flags.includes('c')) },
     nudge() {
       const t = fsRead('/ship/engineering/repairbot/target.txt');
       if (t == null || /J-?47\b/i.test(t)) return null;
-      if (/J-?12|J-?08/i.test(t)) return `The repair bot went to ${t.trim()} and found a damp sandwich. That was only a WARN — we need the junction from the ERROR line.`;
+      if (/J-?12|J-?08/i.test(t)) return `The repair bot went to ${t.trim()} and found a damp sandwich. That was only a WARN. We need the junction from the ERROR line.`;
       if (t.trim()) return `The repair bot doesn't recognise "${t.trim().slice(0, 30)}". It wants the junction code from the ERROR line, like J-00.`;
       return null;
     },
-    hints: [
-      'That log is long — reading all 400 lines would take ages. Real engineers search logs instead of reading them.',
-      'grep finds lines containing a word. tail shows the last lines. less lets you scroll (press q to quit).',
-      'Try:  grep ERROR /ship/engineering/logs/ship.log',
-      'Then tell the bot (use the junction code from the ERROR line):\n  echo J-?? > /ship/engineering/repairbot/target.txt\n  └ echo prints text. > sends it into a file instead of the screen.',
-    ],
     success: 'Repair bot dispatched! Coolant pump unstuck. Temperature dropping. I am taking partial credit.',
-    payoff: 'The fault lights up on the ship schematic — then turns green.',
+    payoff: 'The fault lights up on the ship schematic, then turns green.',
   },
   {
     id: 5, title: 'Locked airlock', room: 'airlock',
     problem: "The inner airlock door is jammed. There's a script that opens it, but the ship refuses to run it.",
-    objective: 'Make open_airlock.sh executable, then run it.',
-    intro: ['The airlock door is locked, and the script that opens it has trust issues.', "Permission denied. Even the door has trust issues. Let's look at its permissions in /ship/airlock."],
+    objective: 'Make /ship/airlock/open_airlock.sh runnable, then run it.',
+    intro: ['The airlock door is locked. The script that opens it lives in /ship/airlock, but the ship refuses to run it.',
+      'A script is a file full of commands. To run one that is in the folder you are in, type ./ and its name, like ./open_airlock.sh',
+      'Every file has permissions: rules about who may read it, change it, or run it. Something is wrong with this one.'],
     setup() { const n = getNode('/ship/airlock/open_airlock.sh'); if (n) n.mode = 0o644; W.flags.airlock = false; },
     solve() { const n = getNode('/ship/airlock/open_airlock.sh'); if (n) n.mode = 0o744; W.flags.airlock = true; W.flags.airlockAt = 0; },
     tasks: [
-      { text: 'Check the script\'s permissions with <code>ls -l</code>', latch: true, check: () => hasEv(e => e.type === 'visit' && e.cmd === 'ls' && e.flags.includes('l') && e.path.startsWith('/ship/airlock')) },
-      { text: 'Give yourself permission to run it (<code>chmod</code>)', check: () => !!((getNode('/ship/airlock/open_airlock.sh')?.mode || 0) & 0o100) },
-      { text: 'Run the script to open the airlock', check: () => !!W.flags.airlock },
+      { text: "Check the script's permissions with <code>ls -l</code>", latch: true, check: () => hasEv(e => e.type === 'visit' && e.cmd === 'ls' && e.flags.includes('l') && e.path.startsWith('/ship/airlock')),
+        hints: ['Go to the airlock folder (cd /ship/airlock) and try running the script with  ./open_airlock.sh . The error message is a clue!',
+          'ls -l (that\'s a small L, for "long") shows extra details, including permissions like -rw-r--r-- at the start of each line.',
+          'cd /ship/airlock\nls -l\n  -rw-r--r--  ... open_airlock.sh\nr = read, w = write, x = execute (run). The first three letters are YOUR permissions: rw- means you can read and write it, but not run it.'] },
+      { text: 'Give yourself permission to run it with <code>chmod</code>', check: () => !!((getNode('/ship/airlock/open_airlock.sh')?.mode || 0) & 0o100),
+        hints: ['chmod changes permissions. You tell it who (u = you, the user), + to add or - to remove, and which permission (x = run).',
+          'chmod u+x followed by the file name gives you permission to run that file.',
+          'chmod u+x open_airlock.sh\nls -l     → -rwxr--r--   (there\'s your new x!)'] },
+      { text: 'Run the script to open the airlock', check: () => !!W.flags.airlock,
+        hints: ['Now that you have the x permission, the ship will let you run it.',
+          './ means "the file right here in this folder". Type ./ and then the script name.',
+          './open_airlock.sh\n  → *** INNER AIRLOCK DOOR: OPEN ***\n(From another folder, use its full path instead: /ship/airlock/open_airlock.sh)'] },
     ],
-    bonus: { text: 'Peek inside the script before running it — a great habit!', check: () => hasEv(e => e.type === 'read' && e.path === '/ship/airlock/open_airlock.sh') },
-    critical() { if (!getNode('/ship/airlock/open_airlock.sh') && !W.flags.airlock) return { msg: "You deleted the airlock script. Bold strategy — now we'd live in the cupboard forever. Restoring our backup!" }; return null; },
-    hints: [
-      'Try running it:  cd /ship/airlock  then  ./open_airlock.sh — and read the error carefully. Errors are clues!',
-      'ls -l shows permissions like -rw-r--r--. r = read, w = write, x = execute (run). No x means no running.',
-      'chmod changes permissions. u+x means "give the user (you!) the x permission".',
-      'chmod u+x open_airlock.sh\n./open_airlock.sh\n  └ ./ means "the file right here in this folder".',
-    ],
+    bonus: { text: 'Read the script with <code>cat</code> before running it. Always a good habit!', check: () => hasEv(e => e.type === 'read' && e.path === '/ship/airlock/open_airlock.sh') },
+    critical() { if (!getNode('/ship/airlock/open_airlock.sh') && !W.flags.airlock) return { msg: "You deleted the airlock script. Bold strategy. Now we'd live in the cupboard forever. Restoring our backup!" }; return null; },
     success: "The airlock is open! I'd say 'after you', but I already rolled through.",
     payoff: 'The airlock door slides open.',
   },
   {
     id: 6, title: 'Reactor hiccups', room: 'reactor',
     problem: 'The reactor is shaking and a robotic arm is flinging toast across the room. One program has gone wild.',
-    objective: 'Find the runaway program and stop it — gently.',
-    intro: ['The reactor is doing a little dance. Reactors should not dance.', "Also a robot arm is throwing toast. I've been hit four times. Find the program that's gone wild."],
+    objective: 'Find the runaway program and stop it, gently.',
+    intro: ['The reactor is doing a little dance. Reactors should not dance. Also a robot arm is throwing toast. I have been hit four times.',
+      'Every program running on the ship is called a process, and each one has an ID number called a PID.',
+      "One process is hogging the ship's brain power (the CPU). Let's find it and ask it nicely to stop."],
     setup() {
       W.flags.armStopped = false; W.flags.gentle = false; W.flags.forceKilled = false;
       if (!W.procs.some(p => p.runaway)) W.procs.push({ pid: W.procs.some(p => p.pid === 420) ? W.nextPid++ : 420, user: USER, cpu: 97.3, mem: 3.3, cmd: 'robot-arm --task=toast --loop --speed=MAX', runaway: true });
     },
     solve() { W.procs = W.procs.filter(p => !p.runaway); W.flags.armStopped = true; W.flags.gentle = true; },
     tasks: [
-      { text: 'List every running program with <code>ps aux</code>', latch: true, check: () => hasEv(e => e.type === 'ps-all') },
-      { text: 'Stop the runaway program', check: () => !W.procs.some(p => p.runaway) },
+      { text: 'List every running program with <code>ps aux</code>', latch: true, check: () => hasEv(e => e.type === 'ps-all'),
+        hints: ['ps lists processes. On its own it only shows the programs in your own terminal. Adding aux shows every process on the ship.',
+          'Type  ps aux  and look at the columns: USER, PID (ID number), %CPU (how hard it is working), %MEM and COMMAND.',
+          'ps aux\nFind the line with a huge %CPU number (around 97). Its PID is the number in the second column.'] },
+      { text: 'Stop the runaway program', check: () => !W.procs.some(p => p.runaway),
+        hints: ["kill PID sends a polite \"please stop\" message to the process with that number. Leave root's programs alone: those keep us alive!",
+          'Type kill, a space, and the PID of the runaway from ps aux.',
+          'kill 420   (use the PID you saw)\nRun ps aux again: it\'s gone!\nkill -9 forces a stop. Save it for programs that ignore a polite kill.'] },
     ],
-    bonus: { text: 'Stop it gracefully: a plain <code>kill</code>, no <code>-9</code>', check: () => W.flags.armStopped && W.flags.gentle },
-    hints: [
-      'Every running program is a "process" with an ID number called a PID. One process is using almost all the CPU (the ship\'s brain power).',
-      'ps aux lists every process. Look at the %CPU column — the biggest number is the troublemaker. kill PID asks a process to stop.',
-      'Run  ps aux  and find the line using about 97% CPU. Its PID is the number in the second column.',
-      'kill 420   (use the PID you saw)\n  └ kill sends a polite "please stop" signal. kill -9 means "stop NOW" — save it for programs that ignore you.',
-    ],
+    bonus: { text: 'Stop it gracefully: a plain <code>kill</code>, without <code>-9</code>', check: () => W.flags.armStopped && W.flags.gentle },
     success: 'The arm stopped! The toast has landed. The reactor is purring. I have collected the toast as evidence.',
     payoff: 'The reactor settles down and the toast stops flying.',
     upgrade: { key: 'laser', text: 'D.U.S.T. unlocked pink lasers!' },
@@ -2190,8 +2240,10 @@ const MISSIONS = [
   {
     id: 7, title: 'Memory full of junk', room: 'maint',
     problem: "The maintenance drone won't wake up. The /ship disk is almost full, and the drone needs room for its flight logs.",
-    objective: 'Free up space until /ship is below 80% full — without deleting anything important.',
-    intro: ['The maintenance drone is asleep. Not lazy — out of space. Like my screw drawer.', "The /ship disk is nearly full. Let's find out what's hogging it. Careful: on Linux, deleting is forever."],
+    objective: 'Free up space until /ship is below 80% full, without deleting anything important.',
+    intro: ['The maintenance drone is asleep. Not lazy: out of space. The /ship disk is almost full.',
+      'First we measure, then we clean. Careful: on Linux, deleting is forever. There is no trash can.',
+      'The drone engineer left notes about what is safe to delete in /ship/maintenance/README.txt. Read them first!'],
     setup() {
       if (!getNode('/ship/maintenance/cache/old_sensor_dumps')) for (let i = 1; i <= 12; i++) fsPut(`/ship/maintenance/cache/old_sensor_dumps/dump_${String(i).padStart(4, '0')}.tmp`, '\u0000sensor junk', { size: (36 + (i * 7) % 11) * MB });
       if (!getNode('/ship/maintenance/drone/firmware.bin')) fsPut('/ship/maintenance/drone/firmware.bin', '\u0000DRONE-FIRMWARE v2.3', { size: 180 * MB });
@@ -2201,24 +2253,27 @@ const MISSIONS = [
     },
     solve() { fsRm('/ship/maintenance/cache'); W.services.drone.state = 'active'; },
     tasks: [
-      { text: 'Check how full the disks are with <code>df</code>', latch: true, check: () => hasEv(e => e.type === 'df') },
-      { text: 'Find what is taking up space with <code>du</code>', latch: true, check: () => hasEv(e => e.type === 'du') },
-      { text: 'Clean up until <code>/ship</code> is below 80% full', check: () => shipUsagePct() < 80 },
+      { text: 'Check how full the disks are with <code>df -h</code>', latch: true, check: () => hasEv(e => e.type === 'df'),
+        hints: ['df shows every disk and how full it is. The Use% column is the important one.',
+          'Add -h for human-friendly sizes: K = kilobytes, M = megabytes (a thousand K), G = gigabytes (a thousand M).',
+          'df -h\n  /dev/ship0  1000M  970M  30M  97%  /ship   ← nearly full!'] },
+      { text: 'Find what is taking up space with <code>du</code>', latch: true, check: () => hasEv(e => e.type === 'du'),
+        hints: ['du measures how much space folders and files use. -s gives one total for each folder, and -h makes the sizes friendly.',
+          'Measure every folder in /ship at once with a * star:  du -sh /ship/*  then dig into the biggest one.',
+          'du -sh /ship/*                    → maintenance is huge\ndu -sh /ship/maintenance/*        → cache is the big one\ndu -sh /ship/maintenance/cache/*'] },
+      { text: 'Clean up until <code>/ship</code> is below 80% full', check: () => shipUsagePct() < 80,
+        hints: ["Read  cat /ship/maintenance/README.txt . It says cache/ is junk and safe to clear. drone/firmware.bin is the drone's brain: never delete that!",
+          'rm deletes a file. rm -r deletes a folder and everything inside it. Double-check the path before you press Enter!',
+          'rm -r /ship/maintenance/cache/old_sensor_dumps\ndf -h /ship     → Use% should now be under 80%'] },
     ],
-    bonus: { text: 'Make sizes human-readable with <code>-h</code>', check: () => hasEv(e => (e.type === 'df' || e.type === 'du') && e.human) },
+    bonus: { text: 'Use <code>-h</code> with df or du to get human-friendly sizes', check: () => hasEv(e => (e.type === 'df' || e.type === 'du') && e.human) },
     critical() {
       const fw = getNode('/ship/maintenance/drone/firmware.bin');
       if (!fw || !fw.data.includes('DRONE-FIRMWARE')) return { msg: "You deleted the drone's brain (firmware.bin). Bold strategy. Restoring our backup!" };
-      if (!getNode('/ship/maintenance/drone/drone.conf')) return { msg: 'drone.conf is gone — the drone forgot who it is. Restoring our backup!' };
+      if (!getNode('/ship/maintenance/drone/drone.conf')) return { msg: 'drone.conf is gone, and now the drone has forgotten who it is. Restoring our backup!' };
       return null;
     },
     onComplete() { WORLD.startService('drone'); },
-    hints: [
-      'Before deleting anything, find out what is big — and read /ship/maintenance/README.txt. The drone engineer left notes.',
-      'df shows how full each disk is. du shows how much space folders use. Add -h for friendly sizes like 120M.',
-      'Try:  du -sh /ship/*   then dig into the biggest one:  du -sh /ship/maintenance/*',
-      'rm -r /ship/maintenance/cache/old_sensor_dumps\n  └ rm deletes. -r means "this folder and everything inside it". There is no trash can, so always check what you are deleting first!',
-    ],
     success: 'The drone is awake! It hovered over, looked at me, and... vacuumed ME. Rude. But operational.',
     payoff: 'The maintenance drone powers up and starts patrolling.',
   },
@@ -2226,22 +2281,27 @@ const MISSIONS = [
     id: 8, title: 'Broken distress beacon', room: 'comms',
     problem: 'The distress beacon is offline, so nobody back home knows where we are.',
     objective: 'Find out why the beacon stopped, fix it, and restart it.',
-    intro: ['Good news: I located the distress beacon. Bad news: it is currently decorative.', "Nobody back home can hear us until it's transmitting. Let's find out why it stopped."],
+    intro: ['Good news: I located the distress beacon. Bad news: it is currently decorative.',
+      "The beacon is a service: a program the ship keeps running in the background. When a service breaks, it writes down why in a log in /var/log.",
+      "Notes about the comms system are in /ship/comms/README.txt. Let's find out why it stopped."],
     setup() { W.services.beacon.state = 'failed'; if (!getNode('/etc/hosts')) fsPut('/etc/hosts', HOSTS_BROKEN, { owner: 'root' }); },
     solve() { fsPut('/etc/hosts', HOSTS_BROKEN.replace('relya.home', 'relay.home'), { owner: 'root' }); W.services.beacon.state = 'active'; },
     tasks: [
-      { text: 'Find out why the beacon stopped (its status or log)', latch: true, check: () => hasEv(e => e.type === 'read' && e.path === '/var/log/beacon.log') },
-      { text: 'Make the beacon able to find <code>relay.home</code>', check: () => !beaconTarget().err },
-      { text: 'Restart the beacon service', check: () => W.services.beacon.state === 'active' },
+      { text: 'Find out why the beacon stopped (its status or its log)', latch: true, check: () => hasEv(e => e.type === 'read' && e.path === '/var/log/beacon.log'),
+        hints: ['systemctl status NAME shows whether a service is running, plus the last lines of its log. The full log is the file /var/log/beacon.log.',
+          'Type  systemctl status beacon  (or  cat /var/log/beacon.log ) and read the line marked [ERR].',
+          "systemctl status beacon\n  → [ERR] cannot resolve relay host 'relay.home' -- name not found (check /etc/hosts)\nThe beacon can't find the address of relay.home!"] },
+      { text: 'Make the beacon able to find <code>relay.home</code>', check: () => !beaconTarget().err,
+        hints: ['Computers find each other by number (an IP address, like 10.0.0.42). /etc/hosts is the ship\'s address book: each line is a number followed by names. Compare it with the name the beacon wants in /etc/beacon.conf.',
+          "cat /etc/hosts and look closely at the relay line. Spot the typo? Files in /etc belong to the ship's admin (root), so put sudo in front to edit:  sudo nano /etc/hosts",
+          'sudo nano /etc/hosts\nUse the arrow keys to reach relya.home, fix it to relay.home, then press Ctrl+O to save and Ctrl+X to exit.\nTest it:  ping relay.home'] },
+      { text: 'Restart the beacon service (it needs <code>sudo</code>)', check: () => W.services.beacon.state === 'active',
+        hints: ['A service only reads its settings when it starts, so restart it to make it notice your fix. Restarting services needs admin power: sudo.',
+          'sudo systemctl restart beacon',
+          'sudo systemctl restart beacon\nsystemctl status beacon     → active (running)\ncurl relay.home/status      → see who heard us!'] },
     ],
-    bonus: { text: 'Prove the home relay answers with <code>ping</code>', check: () => hasEv(e => e.type === 'ping-ok' && e.ip === '10.0.0.42') },
+    bonus: { text: 'Prove the home relay answers with <code>ping relay.home</code> (or its number, 10.0.0.42)', check: () => hasEv(e => e.type === 'ping-ok' && e.ip === '10.0.0.42') },
     critical() { if (!getNode('/etc/beacon.conf')) return { msg: "You deleted the beacon's settings. Bold strategy. Restoring our backup!" }; return null; },
-    hints: [
-      'The beacon wrote down why it stopped. Services keep notes in /var/log — or ask:  systemctl status beacon',
-      'Computers find each other by number (like 10.0.0.42). /etc/hosts is the ship\'s address book: it matches names to numbers. ping checks if a name answers.',
-      'Compare the name in /etc/beacon.conf with the names in /etc/hosts. Spot the typo? System files need admin rights:  sudo nano /etc/hosts',
-      'In nano, change relya.home to relay.home, press Ctrl+O to save and Ctrl+X to exit. Then:\n  sudo systemctl restart beacon\n  └ sudo = "do this as the ship\'s admin". System files and services need it.',
-    ],
     success: "We're transmitting! Somewhere far away, a relay station just heard us say 'HELP'. Politely.",
     payoff: 'The beacon starts transmitting.',
   },
@@ -2249,7 +2309,9 @@ const MISSIONS = [
     id: 9, title: 'Bad engine settings', room: 'engine',
     problem: 'The engines refuse to start. Someone (definitely not D.U.S.T.) scribbled nonsense into the engine settings.',
     objective: 'Back up engine.conf, fix its bad settings, and restart the engine.',
-    intro: ["The engines are fine. The engine settings are... creative. Somebody wrote 'banana'.", "It wasn't me. I don't have fingers. Anyway — let's fix it the safe way: backup first."],
+    intro: ["The engines are fine. The engine settings are... creative. Somebody wrote 'banana'. It wasn't me. I don't have fingers.",
+      'The settings live in /ship/engine/engine.conf, and README.txt in the same folder lists the values that are allowed.',
+      'Rule one of repairs: make a backup copy BEFORE you change anything. Then any mistake can be undone.'],
     setup() {
       fsPut('/ship/engine/engine.conf', ENGINE_CONF);
       for (const p of findFiles((n, p) => n.data === ENGINE_CONF && p !== '/ship/engine/engine.conf' && p.startsWith('/ship/engine'))) fsRm(p);
@@ -2257,35 +2319,40 @@ const MISSIONS = [
     },
     solve() { fsPut('/ship/engine/engine.conf.bak', ENGINE_CONF); fsPut('/ship/engine/engine.conf', ENGINE_CONF.replace('banana', '0.7').replace('= of\n', '= on\n')); W.services.engine.state = 'active'; W.flags.engineAt = 0; },
     tasks: [
-      { text: 'Make a backup copy of <code>engine.conf</code> first', check: () => findFiles((n, p) => n.data === ENGINE_CONF && p !== '/ship/engine/engine.conf').length > 0 },
-      { text: 'Fix the settings in <code>engine.conf</code>', check: () => validateEngine(fsRead('/ship/engine/engine.conf')).length === 0 },
-      { text: 'Restart the engine service', check: () => W.services.engine.state === 'active' },
+      { text: 'Make a backup copy of <code>engine.conf</code> first', check: () => findFiles((n, p) => n.data === ENGINE_CONF && p !== '/ship/engine/engine.conf').length > 0,
+        hints: ['A backup is just a copy with a different name. You learned cp in the star map mission!',
+          'Go to /ship/engine, then copy engine.conf to a new name, like engine.conf.bak',
+          'cd /ship/engine\ncp engine.conf engine.conf.bak\nls      → both files are there'] },
+      { text: 'Fix the bad settings in <code>engine.conf</code>', check: () => validateEngine(fsRead('/ship/engine/engine.conf')).length === 0,
+        hints: ['Compare  cat engine.conf  with  cat README.txt . Or let the engine tell you: sudo systemctl restart engine, then systemctl status engine shows which line is wrong.',
+          'Open the settings in the editor:  nano engine.conf . Arrow keys move, type to change, Ctrl+O saves, Ctrl+X exits.',
+          'nano engine.conf\n  change the bad lines to:\n  fuel_mix = 0.7\n  ignition = on\nCtrl+O to save, Ctrl+X to exit.'] },
+      { text: 'Restart the engine service (it needs <code>sudo</code>)', check: () => W.services.engine.state === 'active',
+        hints: ['The engine only reads its settings when it starts, so restart it. It is a ship service, so it needs sudo, just like the beacon.',
+          'sudo systemctl restart engine  (if it fails, systemctl status engine says which line is still wrong)',
+          'sudo systemctl restart engine\nsystemctl status engine     → active (running)'] },
     ],
-    bonus: { text: 'Compare your fixed file with the backup using <code>diff</code>', check: () => hasEv(e => e.type === 'diff') },
+    bonus: { text: 'Compare your fixed file with the backup using <code>diff engine.conf.bak engine.conf</code>', check: () => hasEv(e => e.type === 'diff') },
     critical() {
       const cur = fsRead('/ship/engine/engine.conf');
       const backup = findFiles((n, p) => n.data === ENGINE_CONF && p !== '/ship/engine/engine.conf').length > 0;
       if (cur !== ENGINE_CONF && !backup && !G.mev.some(e => e.type === 'backupMade')) {
-        return { msg: "Hold on, captain — rule one of engine repair: back it up first! I've put the original back. Copy it, then edit.", fix() { fsPut('/ship/engine/engine.conf', ENGINE_CONF); } };
+        return { msg: "Hold on, captain! Rule one of engine repair: back it up first. I've put the original back. Copy it with cp, then edit.", fix() { fsPut('/ship/engine/engine.conf', ENGINE_CONF); } };
       }
       if (backup) G.event({ type: 'backupMade' });
       return null;
     },
     onComplete() { W.flags.engineAt = Date.now(); },
-    hints: [
-      'Golden rule of repairs: copy the file before you change it. If your fix goes wrong, you can put the original back.',
-      'cp engine.conf engine.conf.bak  makes a backup. Restarting the engine prints errors that say exactly which line is wrong. /ship/engine/README.txt lists the allowed values.',
-      'Try:  sudo systemctl restart engine   then   systemctl status engine\nFix each line it complains about with  nano engine.conf',
-      'cd /ship/engine\ncp engine.conf engine.conf.bak\nnano engine.conf     (fuel_mix = 0.7 and ignition = on)\nsudo systemctl restart engine',
-    ],
     success: 'Engines igniting... one... two... THREE! I may have cried. Robots cannot cry. It was coolant.',
     payoff: 'The engines ignite one by one.',
   },
   {
     id: 10, title: 'Launch sequence', room: 'cockpit',
     problem: 'Time to go home! The launch computer only launches from a script that runs every preflight check first.',
-    objective: 'Pass all three preflight checks and launch — using a script.',
-    intro: ['This is it, cadet. Everything works. Mostly. Time to go home!', 'The launch computer is fussy: it only launches from a script that checks everything first. Read /ship/launch/README.txt.', 'Also, small confession: I may have vacuumed the star map. It looked like dust. It is literally in my name.'],
+    objective: 'Pass all three preflight checks and launch, using a script.',
+    intro: ['This is it, cadet. Everything works. Mostly. Time to go home!',
+      'The launch computer is fussy: it only launches from a script that runs three checks first. Read /ship/launch/README.txt. You can also try each check by hand: preflight hull, preflight nav, preflight fuel.',
+      'Also, small confession: I may have vacuumed the star map. It looked like dust. It is literally in my name.'],
     setup() {
       fsRm('/ship/nav/starmap.dat'); fsRm('/ship/launch/warnings.txt');
       if (!findFiles(n => n.data.includes('[STARMAP-VALID]')).length) fsPut('/ship/archive/backups/nav/starmap.dat.bak', STARMAP);
@@ -2293,18 +2360,21 @@ const MISSIONS = [
       W.flags.launched = false;
     },
     tasks: [
-      { text: 'Restore the star map (D.U.S.T. vacuumed it)', check: () => validStarmap() },
-      { text: 'Count the WARN lines in <code>/ship/launch/fuel.log</code>; write the number into <code>/ship/launch/warnings.txt</code>', check: () => parseInt(((fsRead('/ship/launch/warnings.txt') || '').match(/\d+/) || [])[0], 10) === FUEL_WARNINGS },
-      { text: 'Write a script that runs <code>preflight hull</code>, <code>nav</code> and <code>fuel</code> — then <code>launch</code>', check: () => !!W.flags.launched },
+      { text: 'Restore the star map (D.U.S.T. vacuumed it). Check with <code>preflight nav</code>', check: () => validStarmap(),
+        hints: ['Same as mission 2: the backup is still in /ship/archive/backups/nav. Run  preflight nav  to see what the launch computer thinks.',
+          'Use cp to copy the backup into /ship/nav with the name starmap.dat.',
+          'cp /ship/archive/backups/nav/starmap.dat.bak /ship/nav/starmap.dat\npreflight nav     → [ OK ]'] },
+      { text: 'Count the WARN lines in <code>/ship/launch/fuel.log</code> and write the number into <code>/ship/launch/warnings.txt</code>', check: () => parseInt(((fsRead('/ship/launch/warnings.txt') || '').match(/\d+/) || [])[0], 10) === FUEL_WARNINGS,
+        hints: ['grep WARN finds the warning lines, and wc -l counts lines. A pipe | sends what one command prints straight into the next command.',
+          'Try  grep WARN /ship/launch/fuel.log | wc -l  to get the count. Then send that number into the file with >',
+          'grep WARN /ship/launch/fuel.log | wc -l > /ship/launch/warnings.txt\ncat /ship/launch/warnings.txt\npreflight fuel    → [ OK ]'] },
+      { text: 'Write a script that runs <code>preflight hull</code>, <code>nav</code> and <code>fuel</code>, then <code>launch</code>, and run it', check: () => !!W.flags.launched,
+        hints: ["A script is a text file full of commands. && between two commands means \"only carry on if the last one worked\". Every command reports whether it worked: echo $? shows 0 for success.",
+          'Make the file with  nano ~/launch.sh . First line: #!/bin/bash (it tells Linux to run the file with bash). Next line: the three checks and launch, joined with &&. Save, make it runnable with chmod u+x, then run it with ./ like the airlock script.',
+          'nano ~/launch.sh\n  #!/bin/bash\n  preflight hull && preflight nav && preflight fuel && launch\nCtrl+O, Ctrl+X, then:\ncd ~\nchmod u+x launch.sh\n./launch.sh'] },
     ],
-    bonus: { text: 'Check an exit status with <code>echo $?</code>', check: () => hasEv(e => e.type === 'statusvar') },
+    bonus: { text: 'Check an exit status: run a preflight check, then <code>echo $?</code>', check: () => hasEv(e => e.type === 'statusvar') },
     critical() { if (!findFiles(n => n.data.includes('[STARMAP-VALID]')).length) return { msg: 'Every copy of the star map is gone. Bold strategy. Restoring our backup!' }; return null; },
-    hints: [
-      'Read /ship/launch/README.txt. Then try each check by hand:  preflight hull,  preflight nav,  preflight fuel. Each failure tells you what to fix.',
-      'A pipe | sends one command\'s output into the next:  grep WARN fuel.log | wc -l  counts matching lines. && runs the next command only if the last one succeeded.',
-      'Make a script:  nano ~/launch.sh  — put the checks on one line joined with &&. Save, then  chmod u+x ~/launch.sh  and run  ~/launch.sh',
-      'Inside launch.sh:\n  #!/bin/bash\n  preflight hull && preflight nav && preflight fuel && launch\nFor the fuel count:  grep -c WARN /ship/launch/fuel.log > /ship/launch/warnings.txt',
-    ],
     success: "LAUNCH! Hold on to something! I'm holding on to my screws!",
     payoff: 'The Starling jumps home.',
     upgrade: { key: 'hat', text: "D.U.S.T. earned a tiny captain's hat!" },
@@ -3051,14 +3121,24 @@ const G = {
     if (io) io.line('D.U.S.T.: ' + s, 'c-dust');
     this.say(s, 'smug');
   },
+  currentTaskIndex() {
+    const m = this.currentMission(); if (!m) return -1;
+    const i = m.tasks.findIndex((t, k) => !this.prevTask[k]);
+    return i < 0 ? m.tasks.length - 1 : i;
+  },
   hint() {
-    const m = this.currentMission(); if (!m) { this.say('No mission right now — the whole ship is yours to explore!', 'happy'); return; }
-    const lvl = Math.min(this.hintLevel, 3);
-    const names = ['Story hint', 'Concept hint', 'Command hint', 'Worked example'];
-    const txt = m.hints[lvl];
-    this.say(`<b class="hl">${names[lvl]} (${lvl + 1}/4)</b><br>${esc(txt).replace(/\n/g, '<br>')}`, lvl >= 2 ? 'helpful' : 'curious', { html: true });
-    UI.term.print(`D.U.S.T. ${names[lvl].toLowerCase()}: ` + txt.split('\n')[0] + (txt.includes('\n') ? '  (see D.U.S.T.\'s panel for more)' : ''), 'c-dust');
-    if (this.hintLevel < 3) this.hintLevel++;
+    const m = this.currentMission(); if (!m) { this.say('No mission right now. The whole ship is yours to explore!', 'happy'); return; }
+    const ti = this.currentTaskIndex();
+    if (ti !== this.hintTask) { this.hintTask = ti; this.hintLevel = 0; }
+    const task = m.tasks[ti];
+    const lvl = Math.min(this.hintLevel, task.hints.length - 1);
+    const names = ['Clue', 'Command', 'Worked example'];
+    const txt = task.hints[lvl];
+    const step = task.text.replace(/<[^>]+>/g, '');
+    this.say(`<b class="hl">${names[lvl]} (${lvl + 1}/3)</b> <span class="hstep">for: ${esc(step)}</span>${lvl === 2 ? `<div class="hcode">${esc(txt)}</div>` : '<br>' + esc(txt).replace(/\n/g, '<br>')}${lvl < 2 ? '<br><span class="hmore">Still stuck? Press Hint again.</span>' : ''}`, lvl >= 1 ? 'helpful' : 'curious', { html: true });
+    UI.term.print(`D.U.S.T. ${names[lvl].toLowerCase()}: ` + txt.split('\n')[0] + (txt.includes('\n') ? '   (more in D.U.S.T.\'s panel)' : ''), 'c-dust');
+    if (this.hintLevel < task.hints.length - 1) this.hintLevel++;
+    this.hintsShown = Math.max(this.hintsShown || 0, lvl + 1);
     this.state.hints++; this.renderMission(); this.saveGame();
     this.dustLaser = performance.now() + 900;
   },
@@ -3082,7 +3162,7 @@ const G = {
     if (/Interactive authentication required/.test(e)) return 'Ship services need admin power. Put sudo in front: sudo systemctl restart …';
     if (/Permission denied/.test(e)) return 'Permission denied. Even the door has trust issues. ls -l shows who may read (r), write (w) and run (x) things. Files owned by root need sudo.';
     if (/Operation not permitted/.test(e)) return "That belongs to the ship itself (root), so a cadet can't touch it. Some things even admins shouldn't touch!";
-    if (/No such file or directory|cannot access|cannot stat/.test(e)) return "That path doesn't exist from here. Use ls to look around — or type the start of a name and press Tab.";
+    if (/No such file or directory|cannot access|cannot stat/.test(e)) return this.explainMissingPath(e);
     if (/Is a directory/.test(e)) return "That's a folder, not a file. Use cd to go into it, or ls to look inside.";
     if (/Not a directory/.test(e)) return "That's a file, not a folder — you can't cd into it. Try cat to read it.";
     if (/missing (file )?operand|missing destination|usage|Usage|too few|Too few/.test(e)) return 'That command needs a little more information — like which file. The Notebook has examples.';
@@ -3092,6 +3172,21 @@ const G = {
     if (/Directory not empty/.test(e)) return 'rmdir only removes empty folders. rm -r removes a folder and everything in it (carefully!).';
     if (/FAIL|ABORT|failed/.test(e)) return 'A check failed — but it told you why. Read the message, fix that one thing, and try again.';
     return 'Errors are clues, not failures. Read the message — it usually says exactly what went wrong.';
+  },
+  explainMissingPath(e) {
+    const m = e.match(/'([^']+)'/) || e.match(/^(?:bash: )?(?:\w+: )?([^:]+): No such file/);
+    const bad = m ? m[1].trim() : null;
+    const here = W.cwd === HOME ? '~' : W.cwd.replace(HOME, '~');
+    let msg = `"${bad || 'That'}" isn't here in ${here}. Use ls to see what's in this folder, or type the start of a name and press Tab.`;
+    if (!bad) return msg;
+    if (!bad.startsWith('/') && !bad.startsWith('~')) {
+      const first = bad.split('/')[0];
+      if (getNode('/' + bad) || getNode('/' + first)) return `There's no "${first}" inside ${here}. It lives at the very top of the ship, so start the path with a slash:  /${bad}  (for example:  cd /${bad})`;
+      const where = [];
+      walk(W.fs, '/', (n, p) => { if (n.name === baseName(bad) && where.length < 3) where.push(p); });
+      if (where.length) return `There's no "${bad}" right here in ${here}. I found one at ${where.join(' and ')}. Use the full path (starting with /), or cd .. to go back up a folder.`;
+    }
+    return msg;
   },
   // ---- flow ----
   runLine(line) {
@@ -3130,7 +3225,8 @@ const G = {
     if (quiet) return;
     const nudge = m.nudge && m.nudge();
     if (nudge && nudge !== this.lastNudge) { this.lastNudge = nudge; this.say(nudge, 'curious'); }
-    else if (this.sh.errors.length) { this.say(this.explainErrors(this.sh.errors, line), 'confused'); SFX.err(); }
+    else if (this.sh.errors.length) { this.say(this.explainErrors(this.sh.errors, line), 'confused'); SFX.err(); this.lastWasError = true; }
+    else if (this.lastWasError) { this.lastWasError = false; const ti = this.currentTaskIndex(); this.say('Back on track! Next step: ' + m.tasks[ti].text.replace(/<[^>]+>/g, ''), 'idle'); if (newly) SFX.task(); }
     else if (newly) { SFX.task(); this.say(['Nice! One step done.', 'Checklist updated. I added a tiny sparkle.', 'Good move, cadet!', 'That worked! I knew it would. Mostly.'][Math.floor(Math.random() * 4)], 'happy'); SHIP.spin(); }
     this.saveGame();
   },
@@ -3160,7 +3256,7 @@ const G = {
       <p class="cquote">“${esc(line)}”<br><span>— D.U.S.T.</span></p>
       <p class="skills">Skills learned: ${skills}</p>
       ${m.upgrade ? `<p class="upg">🎁 ${esc(m.upgrade.text)}</p>` : ''}
-      <p class="cscrews">Captured enemy hardware: <b>${this.state.screws}</b> screws${this.bonusDone ? ' (bonus included!)' : ''}</p>`;
+      <p class="cscrews">Captured enemy hardware: <b>${this.state.screws}</b> screw${this.state.screws === 1 ? '' : 's'}${this.bonusDone ? ' (bonus included!)' : ''}</p>`;
     UI.open('#complete');
     el.querySelector('.cnext').focus();
   },
@@ -3201,8 +3297,8 @@ const G = {
       const tw = $('#termWrap'); tw.classList.remove('slide'); void tw.offsetWidth; tw.classList.add('slide');
       $('#banner').innerHTML = `<small>MISSION ${m.id}</small>${esc(m.title)}`; $('#banner').classList.remove('show'); void $('#banner').offsetWidth; $('#banner').classList.add('show');
     }
-    this.introQ = m.intro.slice();
-    this.nextIntro();
+    this.lastWasError = false; this.hintTask = -1; this.hintsShown = 0;
+    this.say(m.intro.map(x => `<p>${esc(x)}</p>`).join(''), 'helpful', { html: true });
     UI.term.setPrompt();
     this.saveGame();
   },
@@ -3228,7 +3324,6 @@ const G = {
     if (!m) {
       card.innerHTML = `<div class="mtag">FREE ROAM</div><h3>The Starling is home!</h3><p class="mprob">Every system is back online. Explore the ship, replay missions from the dots above, or try commands from your notebook.</p>`;
     } else {
-      const lvl = this.hintLevel;
       card.innerHTML = `
         <div class="mtag">MISSION ${m.id} / 10</div>
         <h3>${esc(m.title)}</h3>
@@ -3236,12 +3331,18 @@ const G = {
         <div class="mobj"><span>🎯</span> ${esc(m.objective)}</div>
         <ul class="tasks">${m.tasks.map((t, i) => `<li class="${this.prevTask && this.prevTask[i] ? 'ok' : ''}"><i></i><span>${t.text}</span></li>`).join('')}</ul>
         <div class="bonus ${this.bonusDone ? 'ok' : ''}"><i>★</i><span><b>Bonus:</b> ${m.bonus.text}</span></div>
-        <div class="hintmeter">Hints used: ${'<b class="on"></b>'.repeat(lvl)}${'<b></b>'.repeat(4 - lvl)}</div>`;
+        ${this.skillsBox(m)}`;
     }
     // progress dots
+    card.querySelectorAll('.try').forEach(b => b.onclick = () => { if (b.dataset.cmd) { UI.term.input.value = b.dataset.cmd; UI.term.focus(); UI.term.caretEnd(); } });
     $('#dots').innerHTML = MISSIONS.map((x, i) => `<button class="dot ${this.isDone(x.id) ? 'done' : ''} ${m && m.id === x.id ? 'cur' : ''}" data-i="${i}" title="Mission ${x.id}: ${esc(x.title)}" ${this.isDone(x.id) || (m && m.id === x.id) || i <= this.maxUnlocked() ? '' : 'disabled'}>${x.id}</button>`).join('');
     $('#dots').querySelectorAll('.dot').forEach(b => b.onclick = () => this.jumpTo(+b.dataset.i));
     $('#screwCount').textContent = this.state.screws;
+  },
+  skillsBox(m) {
+    const items = NOTEBOOK.filter(n => n.m === m.id);
+    if (!items.length) return '';
+    return `<details class="learn" open><summary>📘 New this mission</summary>${items.map(n => `<div class="li"><code>${esc(n.cmd)}</code><span>${esc(n.what)}${n.ex[0] ? ` <button class="try" data-cmd="${esc(n.key ? '' : n.ex[0].replace(/\s{2,}\(.*$/, ''))}" title="${n.key ? '' : 'Put this in the terminal'}">${esc(n.ex[0])}</button>` : ''}</span></div>`).join('')}<div class="lnote">All commands so far are in the 📓 Notebook.</div></details>`;
   },
   maxUnlocked() { const i = MISSIONS.findIndex(x => !this.isDone(x.id)); return i < 0 ? 9 : i; },
   jumpTo(i) {
@@ -3313,6 +3414,7 @@ function boot() {
     term.clear();
     term.print('Starling OS 6.8 — emergency terminal', 'c-head');
     term.print(fsRead('/etc/motd').trim(), 'c-dim');
+    term.print('How it works: type a command after the $ sign and press Enter. Stuck? Press Hint.', 'c-dim');
     SHIP.updateLabels();
     if (G.state.finished) { G.renderMission(); G.say('Welcome back, Captain. The Starling is home and every system is green. Explore as much as you like!', 'happy'); term.setPrompt(); }
     else G.startMission(true);
